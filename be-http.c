@@ -40,10 +40,10 @@
 
 static int get_string_envs(CURL *curl, const char *required_env, char *querystring)
 {
-	char *data;
-	char *escaped_key;
-	char *escaped_val;
-	char *env_string;
+	char *data = NULL;
+	char *escaped_key = NULL;
+	char *escaped_val = NULL;
+	char *env_string = NULL;
 
 	char *params_key[MAXPARAMSNUM];
 	char *env_names[MAXPARAMSNUM];
@@ -84,13 +84,10 @@ static int get_string_envs(CURL *curl, const char *required_env, char *querystri
 		}
 	}
 
-	free(data);
-	free(escaped_key);
-	free(escaped_val);
+	if (data) free(data);
+	if (escaped_key) free(escaped_key);
+	if (escaped_val) free(escaped_val);
 	free(env_string);
-	//free(params_key);
-	//free(env_names);
-	//free(env_value);
 	return (num);
 }
 
@@ -118,8 +115,8 @@ static int http_post(void *handle, char *uri, const char *clientid, const char *
 		return (FALSE);
 	}
 	if (conf->hostheader != NULL)
-		curl_slist_append(headerlist, conf->hostheader);
-	curl_slist_append(headerlist, "Expect:");
+		headerlist = curl_slist_append(headerlist, conf->hostheader);
+	headerlist = curl_slist_append(headerlist, "Expect:");
 
 	//_log(LOG_NOTICE, "u=%s p=%s t=%s acc=%d", username, password, topic, acc);
 
@@ -128,7 +125,7 @@ static int http_post(void *handle, char *uri, const char *clientid, const char *
 		_fatal("ENOMEM");
 		return (FALSE);
 	}
-	
+
 	// enable the https
 	if (strcmp(conf->with_tls, "true") == 0){
 		sprintf(url, "https://%s:%d%s", conf->ip, conf->port, uri);
@@ -187,18 +184,24 @@ static int http_post(void *handle, char *uri, const char *clientid, const char *
 	curl_easy_setopt(curl, CURLOPT_POST, 1L);
 	curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headerlist);
+	curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
+	curl_easy_setopt(curl, CURLOPT_USERNAME, username);
+	curl_easy_setopt(curl, CURLOPT_PASSWORD, password);
 	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10);
 
 	re = curl_easy_perform(curl);
 	if (re == CURLE_OK) {
 		re = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &respCode);
-		if (re == CURLE_OK && respCode == 200) {
+		if (re == CURLE_OK && respCode >= 200 && respCode < 300) {
 			ok = TRUE;
+		} else if (re == CURLE_OK && respCode >= 500) {
+			ok = BACKEND_ERROR;
 		} else {
 			//_log(LOG_NOTICE, "http auth fail re=%d respCode=%d", re, respCode);
 		}
 	} else {
 		_log(LOG_DEBUG, "http req fail url=%s re=%s", url, curl_easy_strerror(re));
+		ok = BACKEND_ERROR;
 	}
 
 	curl_easy_cleanup(curl);
@@ -259,7 +262,7 @@ void *be_http_init()
 	conf->getuser_envs = p_stab("http_getuser_params");
 	conf->superuser_envs = p_stab("http_superuser_params");
 	conf->aclcheck_envs = p_stab("http_aclcheck_params");
-	
+
 	if (p_stab("http_with_tls") != NULL) {
 		conf->with_tls = p_stab("http_with_tls");
 	} else {

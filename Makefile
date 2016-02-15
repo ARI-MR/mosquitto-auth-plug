@@ -21,7 +21,7 @@ ifneq ($(BACKEND_CDB),no)
 	CDBLIB = $(CDBDIR)/libcdb.a
 	BE_CFLAGS += -I$(CDBINC)/
 	BE_LDFLAGS += -L$(CDBDIR)
-	BE_LDADD = -lcdb
+	BE_LDADD += -lcdb
 	BE_DEPS += $(CDBLIB)
 	OBJS += be-cdb.o
 endif
@@ -66,7 +66,7 @@ ifneq ($(BACKEND_LDAP),no)
 	BACKENDS += -DBE_LDAP
 	BACKENDSTR += LDAP
 
-	BE_LDADD = -lldap -llber
+	BE_LDADD += -lldap -llber
 	OBJS += be-ldap.o
 endif
 
@@ -100,7 +100,6 @@ CFLAGS += $(BACKENDS) $(BE_CFLAGS) -I$(MOSQ)/src -DDEBUG=1 $(OSSLINC)
 LDFLAGS = $(BE_LDFLAGS) -L$(MOSQUITTO_SRC)/lib/
 # LDFLAGS += -Wl,-rpath,$(../../../../pubgit/MQTT/mosquitto/lib) -lc
 # LDFLAGS += -export-dynamic
-LDFLAGS += -lcares
 LDADD = $(BE_LDADD) $(OSSLIBS) -lmosquitto
 
 all: printconfig auth-plug.so np
@@ -112,6 +111,12 @@ printconfig:
 	@echo
 	@echo "If you changed the backend selection, you might need to 'make clean' first"
 	@echo
+	@echo "CFLAGS:  $(CFLAGS)"
+	@echo "LDFLAGS: $(LDFLAGS)"
+	@echo "LDADD:   $(LDADD)"
+	@echo
+
+
 
 auth-plug.so : $(OBJS) $(BE_DEPS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC -shared -o $@ $(OBJS) $(BE_DEPS) $(LDADD)

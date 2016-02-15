@@ -22,8 +22,8 @@ and authorization (ACL). Currently not all back-ends have the same capabilities
 | Capability                 | mysql | redis | cdb   | sqlite | ldap | psk | postgres | http | MongoDB |
 | -------------------------- | :---: | :---: | :---: | :---:  | :-:  | :-: | :------: | :--: | :-----: |
 | authentication             |   Y   |   Y   |   Y   |   Y    |  Y   |  Y  |    Y     |  Y   |  Y      |
-| superusers                 |   Y   |       |       |        |      |  2  |    Y     |  Y   |         |
-| acl checking               |   Y   |   Y   |   1   |   1    |      |  2  |    Y     |  Y   |  1      |
+| superusers                 |   Y   |       |       |        |      |  2  |    Y     |  Y   |  Y      |
+| acl checking               |   Y   |   Y   |   1   |   1    |      |  2  |    Y     |  Y   |  Y      |
 | static superusers          |   Y   |   Y   |   Y   |   Y    |      |  2  |    Y     |  Y   |  Y      |
 
  1. Currently not implemented; back-end returns TRUE
@@ -97,6 +97,7 @@ Options therein with a leading ```auth_opt_``` are handed to the plugin. The fol
 | -------------- | ---------- | :---------: | --------------------- |
 | backends       |            |     Y       | comma-separated list of back-ends to load |
 | superusers     |            |             | fnmatch(3) case-sensitive string
+| log_quiet      | false      |             | don't log DEBUG messages |
 
 Individual back-ends have their options described in the sections below.
 
@@ -319,14 +320,16 @@ The following `auth_opt_` options are supported by the `http` back-end:
 | http_aclcheck_uri |                   |      Y      | URI for check acl               |
 | http_with_tls     | false             |      N      | Use TLS on connect              |
 
-If the configured URLs return an HTTP status code == `200`, the authentication /
-authorization succeeds, else it fails.
+If the configured URLs return an HTTP status code == `2xx`, the authentication /
+authorization succeeds. If the status code == `4xx` authentication /
+authorization fails. For status code == `5xx` or server unreachable, if no
+other backend succeeded, then an error is returned and client is disconnected.
 
-| URI-Param         | username | password | topic | acc |
-| ----------------- | -------- | -------- | :---: | :-: |
-| http_getuser_uri  |   Y      |   Y      |   N   |  N  |
-| http_superuser_uri|   Y      |   N      |   N   |  N  |
-| http_aclcheck_uri |   Y      |   N      |   Y   |  Y  |
+| URI-Param         | username | password | clientid | topic | acc |
+| ----------------- | -------- | -------- | -------- | :---: | :-: |
+| http_getuser_uri  |   Y      |   Y      |   N      |   N   |  N  |
+| http_superuser_uri|   Y      |   N      |   N      |   N   |  N  |
+| http_aclcheck_uri |   Y      |   N      |   Y      |   Y   |  Y  |
 
 Mosquitto configuration for the `http` back-end:
 
@@ -493,6 +496,44 @@ the beginning of the line indicating a _superuser_)
   loc/test                                 PERMIT
   $SYS/broker/log/N                        PERMIT
 ```
+
+## MongoDB
+The `mongo` back-end works with superuser and ACL checks with the following collections format.
+
+```
+users = {username: "user",
+	password: "PBKDF_string"
+	topics: int (topicID location)
+	superuser: int (1 true, 0 false)
+}
+topics = {_id: int,
+	topics: ["xx/xx/#", "yy/#", ...]
+}
+```
+Collection name parameters can be set in mongoParam.h
+```
+mongoParam.h
+
+/*
+*Mongo database parameters
+*
+*dbName - Mongo database name
+*colName (topics - topicID(int)) - Mongo collection of users (username, password, superuser, topics)
+*topicLoc - Mongo collection of topics (_id, topics)
+*topicID - mongo fieldname for topicSet ID
+*superUser - mongo fieldname for superuser flag (true/false) 
+*/
+...
+```
+
+Mosquitto configuration for the `mongo` back-end:
+```
+auth_plugin /home/jpm/mosquitto-auth-plug/auth-plug.so
+auth_opt_mongo_host localhost
+auth_opt_mongo_port 27017
+```
+currently no readwrite checks on ACL, all topics will be readwrite, do not add a flag to the array of topics in db.
+
 
 ## Passwords
 
